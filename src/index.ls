@@ -166,7 +166,7 @@ mod = ({context, t}) ->
           na = if isNaN(+na) => na else +na
           nb = if isNaN(+nb) => nb else +nb
           if na > nb => 1 else if na < nb => -1 else 0
-        (if @cfg.sort.dir == \asc => 1 else -1) * d
+        (if @cfg.sort.dir == \asc xor @cfg.type == \bar => 1 else -1) * d
     if @cfg.palette => @tint.set @cfg.palette
     @layout.update false
 
