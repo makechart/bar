@@ -266,7 +266,7 @@ mod = ({context, t}) ->
           key = idx
           if !legend.is-selected(key) => continue
 
-          bars.push {
+          bars.push datum = {
             size: size / sum
             offset: offset / sum
             key: key
@@ -275,6 +275,8 @@ mod = ({context, t}) ->
             unit: binding.size[key].unit or ''
             order: bars.length
           }
+          # for auto-select + default data-accessor
+          datum._raw = {} <<< datum
           # multiple bars
           if cfg.multiple == \split => offset += max-per-group[idx]
           # stack bar
@@ -287,6 +289,7 @@ mod = ({context, t}) ->
             .remove!
 
           ..enter!append \rect
+            ..attr \class, -> \data
             ..attr(\width, (d,i) -> (scale.x.bandwidth! - 2) >? 1)  if type == \column
             ..attr(\y, (d,i) -> scale.y(0))                         if type == \column
             ..attr(\height, (d,i) -> (scale.y.bandwidth! - 2) >? 1) if type != \column

@@ -1,9 +1,10 @@
 # Change Logs
 
-## v0.0.2
+## v0.0.2 (upcoming)
 
  - fix bug: brush isn't hidden even if disabled
  - improve sample data
+ - correctly support auto-select feature
 
 
 ## v0.0.1
