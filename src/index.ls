@@ -12,12 +12,13 @@ module.exports =
 mod = ({context, t}) ->
   {chart,d3,debounce} = context
   sample: ->
+    cat = <[apple banana peach orange]>
     raw: [0 to 10].map (val) ~>
-      ret = {name: val}
-      for i from 1 to 4 => ret["val#i"] = (10 * Math.random!).toFixed(1)
+      ret = {name: "Y#{1995 + val}"}
+      for i from 0 to 3 => ret[cat[i]] = (10 * Math.random!).toFixed(1)
       return ret
     binding:
-      size: [1 to 4].map -> {key: "val#it", unit: "amount"}
+      size: [0 to 3].map (i) -> {key: cat[i], unit: "KG"}
       name: {key: "name"}
   config: {
     legend: {} <<< chart.utils.config.preset.legend
@@ -332,9 +333,9 @@ mod = ({context, t}) ->
             if item.name in range => 1 else 0.2
 
     if @cfg.brush.enabled =>
-      @g.brush.style.display = \block
+      @g.brush.style \display, \block
       @g.brush.call @brush
-    else @g.brush.style.display = \none
+    else @g.brush.style \display, \none
     @g.brush.selectAll \rect.selection
       .attr \shape-rendering, \auto
     @legend.render!
