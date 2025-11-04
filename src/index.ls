@@ -102,6 +102,17 @@ mod = ({context, t}) ->
         return {name: "#{data.group or ''} / #{data.name or ''}", value: v}
       range: ~> @layout.get-node \view .getBoundingClientRect!
     }
+    /* # this is a PoC of updating brush automatically
+    setInterval (~>
+      if @cfg.type == \column =>
+        if !@scale?x => return
+        w = @scale.x.bandwidth!
+        range = @scale.x.range!
+        @_x = (@_x or range.0)
+        @g.brush.call @brushs.x.move, [@_x + w * 0.1, @_x + w * 0.8]
+        @_x = @_x + w
+        if @_x + w > range.1 => @_x = 0
+    ), 1000 */
 
   destroy: -> if @tip => @tip.destroy!
 
