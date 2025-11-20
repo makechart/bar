@@ -1,5 +1,10 @@
 # Change Logs
 
+## v0.0.3
+
+ - use xaxis / yaxis format (chosen based on type) for tip formatting
+
+
 ## v0.0.2
 
  - fix bug: brush isn't hidden even if disabled

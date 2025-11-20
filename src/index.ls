@@ -98,7 +98,10 @@ mod = ({context, t}) ->
       accessor: ({evt}) ~>
         if !(evt.target and data = d3.select(evt.target).datum!) => return null
         if data.type in <[overlay selection s]> => return
-        v = if isNaN(data.size) => '-' else "#{data.size.toFixed(2)}#{data.unit or ''}"
+        v = if isNaN(data.size) => '-'
+        else
+          fmt = @cfg?[if @type == \column => \yaxis else \xaxis]?label?format or '.2s'
+          "#{d3.format(fmt)(data.size)}#{data.unit or ''}"
         return {name: "#{data.group or ''} / #{data.name or ''}", value: v}
       range: ~> @layout.get-node \view .getBoundingClientRect!
     }
