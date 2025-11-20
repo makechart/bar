@@ -102,7 +102,7 @@ mod = ({context, t}) ->
         else
           fmt = @cfg?[if @type == \column => \yaxis else \xaxis]?label?format or '.2s'
           "#{d3.format(fmt)(data.size)}#{data.unit or ''}"
-        return {name: "#{data.group or ''} / #{data.name or ''}", value: v}
+        return {name: data.name or '', group: data.group or '', value: v}
       range: ~> @layout.get-node \view .getBoundingClientRect!
     }
     /* # this is a PoC of updating brush automatically

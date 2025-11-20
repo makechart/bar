@@ -1,5 +1,10 @@
 # Change Logs
 
+## v0.0.4
+
+ - use separated field `name` and `group` for tip rendering
+
+
 ## v0.0.3
 
  - use xaxis / yaxis format (chosen based on type) for tip formatting
