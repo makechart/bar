@@ -1,5 +1,10 @@
 # Change Logs
 
+## v0.0.6
+
+ - use value-alt instead of construct tooltip string manually
+
+
 ## v0.0.5
 
  - fix bug: value in tooltip under percent mode shows 0
