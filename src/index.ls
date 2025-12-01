@@ -98,10 +98,12 @@ mod = ({context, t}) ->
       accessor: ({evt}) ~>
         if !(evt.target and data = d3.select(evt.target).datum!) => return null
         if data.type in <[overlay selection s]> => return
+        p = if !@cfg.percent => ""
+        else if isNaN(data.percent) => "(-%)"
+        else "(#{(data.percent * 100).toFixed(1)}%)"
         v = if isNaN(data.raw) => '-'
         else
           fmt = @cfg?[if @type == \column => \yaxis else \xaxis]?label?format or '.2s'
-          p = if @cfg.percent => "(#{(data.percent * 100).toFixed(1)}%)" else ""
           "#{d3.format(fmt)(data.raw)}#{data.unit or ''}"
         return {name: data.name or '', group: data.group or '', value: v, value-alt: p}
       range: ~> @layout.get-node \view .getBoundingClientRect!

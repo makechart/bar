@@ -1,5 +1,10 @@
 # Change Logs
 
+## v0.0.7
+
+ - separate percent calculation from raw in tooltip and validate value before using
+
+
 ## v0.0.6
 
  - use value-alt instead of construct tooltip string manually
