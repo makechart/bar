@@ -1,5 +1,11 @@
 # Change Logs
 
+## v0.0.5
+
+ - fix bug: value in tooltip under percent mode shows 0
+ - add percent number in tooltip if percent mode is on
+
+
 ## v0.0.4
 
  - use separated field `name` and `group` for tip rendering
