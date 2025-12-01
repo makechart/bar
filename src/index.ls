@@ -101,7 +101,7 @@ mod = ({context, t}) ->
         v = if isNaN(data.raw) => '-'
         else
           fmt = @cfg?[if @type == \column => \yaxis else \xaxis]?label?format or '.2s'
-          p= if @cfg.percent => "(#{(data.percent * 100).toFixed(1)}%)" else ""
+          p = if @cfg.percent => "(#{(data.percent * 100).toFixed(1)}%)" else ""
           "#{d3.format(fmt)(data.raw)}#{data.unit or ''} #p"
         return {name: data.name or '', group: data.group or '', value: v}
       range: ~> @layout.get-node \view .getBoundingClientRect!
