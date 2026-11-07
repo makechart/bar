@@ -1,7 +1,8 @@
 module.exports =
   pkg:
     name: 'bar', version: '0.0.1'
-    extend: {name: "@makechart/base"}
+    # lite: 不帶 d3 的 base. 補間改用 chart.anim, 可以逐格錄影 ( 見 @plotdb/chart utils/anim )
+    extend: {name: "@makechart/base", path: "lite/index.html"}
     dependencies: []
     i18n:
       "zh-TW":
@@ -9,8 +10,12 @@ module.exports =
   init: ({root, context, t, pubsub}) ->
     pubsub.fire \init, mod: mod({context, t})
 
+# 刷選框自己的節點 ( __data__.type ). hover 打到這些就往下找真正的 bar
+brush-parts = <[overlay selection w e n s]>
+
 mod = ({context, t}) ->
-  {chart,d3,debounce} = context
+  {chart} = context
+  {scale: Scale, brush: Brush, format, debounce, anim: {join}} = chart.utils
   sample: ->
     cat = <[apple banana peach orange]>
     raw: [0 to 10].map (val) ~>
@@ -56,10 +61,11 @@ mod = ({context, t}) ->
         if @legend.is-visible(@align-idx) or @align-idx == idx => break
       @resize!
       @render!
-    @g = Object.fromEntries <[view xaxis yaxis legend]>.map ~> [it, d3.select(@layout.get-group it)]
-    @g.subview = @g.view.append \g
-    @g.brush = @g.view.append \g
-    @brushs = x: d3.brushX!, y: d3.brushY!
+    svgns = "http://www.w3.org/2000/svg"
+    @g = Object.fromEntries <[view xaxis yaxis legend]>.map ~> [it, @layout.get-group it]
+    @g.subview = @g.view.appendChild document.createElementNS(svgns, \g)
+    @g.brush = @g.view.appendChild document.createElementNS(svgns, \g)
+    @brushs = x: new Brush(dir: \x), y: new Brush(dir: \y)
     @brush-type = ~> if @cfg.type == \bar => \y else \x
     @range = "null"
     brush = debounce 150, (e) ~>
@@ -89,34 +95,34 @@ mod = ({context, t}) ->
       layout: @layout
       name: \legend
       root: @root
-      shape: (d) -> d3.select(@).attr \fill, tint.get(d.text or d.key)
+      shape: (d) -> @setAttribute \fill, tint.get(d.text or d.key)
     @legend.on \select, ~> @bind!; @resize!; @render!
     # d3.brush covers the whole svg element. need to support by calculation. TODO
     # for now we simply hide brush group if brush is not enabled
     @tip = new chart.utils.tip {
       root: @root
       accessor: ({evt}) ~>
-        if !(evt.target and data = d3.select(evt.target).datum!) => return null
+        if !(evt.target and data = evt.target.__data__) => return null
         # brush 蓋在整個繪圖區上, 開著的時候 hover 全部打在它身上, tip 就再也出不來.
         # 拿座標往下找真正被指到的那一根 - elementsFromPoint 回傳的是整疊命中的元素,
         # brush 自己的幾片在最上面, 底下才是 bar
-        if data.type in <[overlay selection s]> and evt.client-x? =>
+        if data.type in brush-parts and evt.client-x? =>
           data = null
           for n in document.elements-from-point(evt.client-x, evt.client-y)
-            d = d3.select(n).datum!
-            if !d or (d.type in <[overlay selection s]>) => continue
+            d = n.__data__
+            if !d or (d.type in brush-parts) => continue
             if !(d.raw?) => continue
             data = d
             break
         if !data => return null
-        if data.type in <[overlay selection s]> => return
+        if data.type in brush-parts => return
         p = if !@cfg.percent => ""
         else if isNaN(data.percent) => "(-%)"
         else "(#{(data.percent * 100).toFixed(1)}%)"
         v = if isNaN(data.raw) => '-'
         else
           fmt = @cfg?[if @type == \column => \yaxis else \xaxis]?label?format or '.2s'
-          "#{d3.format(fmt)(data.raw)}#{data.unit or ''}"
+          "#{format.from(fmt)(data.raw)}#{data.unit or ''}"
         return {name: data.name or '', group: data.group or '', value: v, value-alt: p}
       range: ~> @layout.get-node \view .getBoundingClientRect!
     }
@@ -127,7 +133,7 @@ mod = ({context, t}) ->
         w = @scale.x.bandwidth!
         range = @scale.x.range!
         @_x = (@_x or range.0)
-        @g.brush.call @brushs.x.move, [@_x + w * 0.1, @_x + w * 0.8]
+        @brushs.x.move [@_x + w * 0.1, @_x + w * 0.8]
         @_x = @_x + w
         if @_x + w > range.1 => @_x = 0
     ), 1000 */
@@ -138,21 +144,21 @@ mod = ({context, t}) ->
     @render!
     # internal = 這個 filter 就是 brush 自己發出來的, 不必再回頭動 brush
     if internal => return
-    if !@brush or !(node = @g.brush.node!) or !node.__brush => return
+    if !@brush or !@brush.attached! => return
     f = (filters or {}).name
     # 舊寫法: 直接給 brush 的像素區間
-    if Array.isArray f => return @brush.move @g.brush, f.map ~> @scale[@brush-type!](it)
+    if Array.isArray f => return @brush.move f.map ~> @scale[@brush-type!](it)
     scale = @scale[@brush-type!]
     if !scale or !scale.domain => return
     vs = (f or {}).value or []
     domain = scale.domain!
     idx = (vs.map -> domain.indexOf it).filter -> it >= 0
-    if !idx.length => return @brush.move @g.brush, null
+    if !idx.length => return @brush.move null
     [a, b] = [Math.min.apply(Math, idx), Math.max.apply(Math, idx)]
     bw = scale.bandwidth!
     # 目前這個框已經框到同一批 band 就不要動它. host 每次 render 都會把選取灌回來,
     # 不擋的話使用者放開滑鼠就會看到框跳去對齊格線 - 選的東西沒變, 只是框自己動了
-    if (cur = d3.brush-selection node) =>
+    if (cur = @brush.selection!) =>
       ci = if @brush-type! == \x => cur.map ~> Math.floor(it / bw) >? 0 <? (domain.length - 1)
       else
         box = @layout.get-box \view
@@ -161,10 +167,10 @@ mod = ({context, t}) ->
     # brush 只認得連續區間, 所以外面灌進來的值列表取頭尾.
     # 遠端那一側退 1px: 剛好落在格線上會被 Math.floor 算進下一格, 灌回去的選取
     # 就會每同步一次多吃一根 ( 來回幾次整排都被選中 )
-    if @brush-type! == \x => @brush.move @g.brush, [a * bw, (b + 1) * bw - 1]
+    if @brush-type! == \x => @brush.move [a * bw, (b + 1) * bw - 1]
     else
       box = @layout.get-box \view
-      @brush.move @g.brush, [box.height - (b + 1) * bw + 1, box.height - a * bw]
+      @brush.move [box.height - (b + 1) * bw + 1, box.height - a * bw]
   parse: ->
     @data.map (d) -> d.size = d.size.map -> if isNaN(it) => 0 else it
     @align-idx = undefined
@@ -230,8 +236,8 @@ mod = ({context, t}) ->
 
     if @type == \column =>
       @scale <<<
-        y: d3.scaleLinear!domain([0,max]).range [box.height, 0]
-        x: d3.scaleBand!domain @order.map(->it.name or it.key) .range [0, box.width]
+        y: Scale.linear!domain([0,max]).range [box.height, 0]
+        x: Scale.band!domain @order.map(->it.name or it.key) .range [0, box.width]
       max-tick = Math.ceil(@layout.get-box \yaxis .height / 40) >? 2
       yticks = if @cfg.bump => [1 to ((@parsed.length or 1) >? 1)]
       else @scale.y.ticks((@cfg.{}yaxis.tick.count or 4) <? max-tick)
@@ -251,8 +257,8 @@ mod = ({context, t}) ->
       )
     else
       @scale <<<
-        x: d3.scaleLinear!domain([0,max]).range [box.width, 0]
-        y: d3.scaleBand!domain @order.map(->it.name or it.key) .range [0, box.height]
+        x: Scale.linear!domain([0,max]).range [box.width, 0]
+        y: Scale.band!domain @order.map(->it.name or it.key) .range [0, box.height]
       max-tick = Math.ceil(@layout.get-box \xaxis .width / 80) >? 2
       xticks = if @cfg.bump => [1 to ((@parsed.length or 1) >? 1)]
       else @scale.x.ticks((@cfg.{}xaxis.tick.count or 4) <? max-tick)
@@ -291,162 +297,135 @@ mod = ({context, t}) ->
   render: ->
     {binding, scale, range, delta, base-offset, max-per-group, cfg, tint, data, type, legend} = @
     self = @
+    # 所有補間都走 chart 的時鐘 ( @anim ), manual 模式下可以逐格錄
+    tween = (n, attrs, opt) ~> @anim.tween n, attrs, opt
+    drop = (n) ~>
+      @anim.interrupt n
+      Array.from(n.querySelectorAll \rect).map ~> @anim.interrupt it
+      if n.parentNode => n.parentNode.removeChild n
     partial = (@subset.mode! == \partial)
     gap = @cfg.gap
     gap <?= (if @type == \column => scale.x.bandwidth! else scale.y.bandwidth!) - 1
-    @g.subview.selectAll \g.bar .data @data
-      ..exit!remove!
-      ..enter!append \g .attr \class, \bar
-        .attr \transform, (d,i) ~>
-          if @type == \column => "translate(#{scale.x(d.name)},0)"
-          else "translate(0,#{scale.y(d.name)})"
-    @g.subview.selectAll \g.bar
-      .transition!duration 350
-      .attr \transform, (d,i) ~>
-        if @type == \column => "translate(#{scale.x(d.name)},0)"
-        else "translate(0,#{scale.y(d.name)})"
-    @g.subview.selectAll \g.bar
-      .each (item,j) ->
-        [bars,offset] = [[],0]
-        # alternative align base. required for dancing stack
-        offset = (delta - base-offset[j])
+    pos = (d) ~>
+      if @type == \column => "translate(#{scale.x(d.name)},0)"
+      else "translate(0,#{scale.y(d.name)})"
+    gj = join root: @g.subview, tag: \g, cls: \bar, data: @data
+    gj.exit.map drop
+    gj.enter.map (n) -> n.setAttribute \transform, pos(n.__data__)
+    gj.nodes.map (n) -> tween n, {transform: pos(n.__data__)}
+    gj.nodes.map (node, j) ->
+      item = node.__data__
+      [bars,offset] = [[],0]
+      # alternative align base. required for dancing stack
+      offset = (delta - base-offset[j])
 
-        # use to tweak output size / offset. 1 = no modification
-        sum = 1
-        # and set sum to this for 100% stack bar
-        if cfg.percent == true =>
-          sum = item.size
-            .filter((d,i) -> legend.is-visible(i))
-            .reduce(((a,b) -> a + b),0) >? 1
+      # use to tweak output size / offset. 1 = no modification
+      sum = 1
+      # and set sum to this for 100% stack bar
+      if cfg.percent == true =>
+        sum = item.size
+          .filter((d,i) -> legend.is-visible(i))
+          .reduce(((a,b) -> a + b),0) >? 1
 
-        for idx from 0 til item.size.length =>
-          size = item.size[idx]
-          key = idx
-          if !legend.is-visible(key) => continue
+      for idx from 0 til item.size.length =>
+        size = item.size[idx]
+        key = idx
+        if !legend.is-visible(key) => continue
 
-          bars.push datum = {
-            raw: size
-            percent: size / sum
-            size: size / sum
-            offset: offset / sum
-            key: key
-            group: item.name
-            name: binding.size[key].name or binding.size[key].key
-            unit: binding.size[key].unit or ''
-            order: bars.length
-            subset: (if item.subset => ((item.subset.size or [])[idx] or 0) / sum else null)
-            # legend 關掉但 legend.subset.mode 是 dim: 位置與總量都留著, 只是灰掉
-            dimmed: !legend.is-selected(key)
-          }
-          # for auto-select + default data-accessor
-          datum._raw = {} <<< datum
-          # multiple bars
-          if cfg.multiple == \split => offset += max-per-group[idx]
-          # stack bar
-          else if cfg.multiple == \stack => offset += size
+        bars.push datum = {
+          raw: size
+          percent: size / sum
+          size: size / sum
+          offset: offset / sum
+          key: key
+          group: item.name
+          name: binding.size[key].name or binding.size[key].key
+          unit: binding.size[key].unit or ''
+          order: bars.length
+          subset: (if item.subset => ((item.subset.size or [])[idx] or 0) / sum else null)
+          # legend 關掉但 legend.subset.mode 是 dim: 位置與總量都留著, 只是灰掉
+          dimmed: !legend.is-selected(key)
+        }
+        # for auto-select + default data-accessor
+        datum._raw = {} <<< datum
+        # multiple bars
+        if cfg.multiple == \split => offset += max-per-group[idx]
+        # stack bar
+        else if cfg.multiple == \stack => offset += size
 
-        d3.select @ .selectAll \rect.data .data(bars, (d,i) -> d.key)
-          ..exit!each (d,i) -> d._removing = true
-          ..exit!
-            .transition!delay 150
-            .remove!
-
-          ..enter!append \rect
-            ..attr \class, -> \data
-            ..attr(\width, (d,i) -> (scale.x.bandwidth! - 2) >? 1)  if type == \column
-            ..attr(\y, (d,i) -> scale.y(0))                         if type == \column
-            ..attr(\height, (d,i) -> (scale.y.bandwidth! - 2) >? 1) if type != \column
-            ..attr(\x, (d,i) -> scale.x(0))                         if type != \column
-
-        tran = d3.select @ .selectAll \rect.data
-          .transition!duration 350
-          # group bar
-          .call (sel) ->
-            if cfg.multiple != \group => return
-            sel
-              ..attr(\x, (d,i) -> gap/2 + d.order * (scale.x.bandwidth! - gap) / bars.length)  if type == \column
-              ..attr(\width, (d,i) -> (scale.x.bandwidth! - gap) / bars.length)          if type == \column
-              ..attr(\y, (d,i) -> Math.round(Math.min(scale.y(0), scale.y(d.size))))     if type == \column
-
-              ..attr(\y, (d,i) -> gap/2 + d.order * (scale.y.bandwidth! - gap) / bars.length)  if type != \column
-              ..attr(\height, (d,i) -> (scale.y.bandwidth! - gap) / bars.length)       if type != \column
-              ..attr(\x, (d,i) -> Math.round(Math.min(scale.x(0), scale.x(d.size)))) if type != \column
-
-          # stack bar
-          .call (sel) ->
-            if cfg.multiple != \stack => return
-            sel
-              ..attr(\x, gap/2) if type == \column
-              ..attr(\width, (d,i) -> scale.x.bandwidth! - gap) if type == \column
-              ..attr(\y, (d,i) ->
-                if d._removing => return scale.y(d.offset + d.size/2)
-                Math.round(Math.min(scale.y(d.offset), scale.y(d.offset + d.size)))) if type == \column
-              ..attr(\y, gap/2) if type != \column
-              ..attr(\height, (d,i) -> scale.y.bandwidth! - gap) if type != \column
-              ..attr(\x, (d,i) ->
-                if d._removing => return scale.x(d.offset + d.size/2)
-                Math.round(Math.min(scale.x(d.offset), scale.x(d.offset + d.size)))) if type != \column
-
+      # 新進場的 rect 起始位置 ( 從基線長出來 )
+      init = (n) ->
         if type == \column =>
-          tran.attr \height, (d,i) -> if d._removing => 0 else Math.round(Math.abs(scale.y(0) - scale.y(d.size)))
+          n.setAttribute \width, (scale.x.bandwidth! - 2) >? 1
+          n.setAttribute \y, scale.y(0)
         else
-          tran.attr \width, (d,i) -> if d._removing => 0 else Math.round(Math.abs(scale.x(0) - scale.x(d.size)))
-        color = (d) -> tint.get d.name, (if cfg.color-variant => ((j/data.length) - 0.5) else 0)
-        tran
-          .attr \fill, (d,i) ->
-            # legend 關掉的只降透明 ( 見下面 fill-opacity ), 顏色留著才認得出是哪一項
-            if !d.dimmed and partial and d.subset? => self.subset.color(color d) else color d
-          .attr \fill-opacity, (d,i) ~>
-            if d.dimmed => return legend.opacity!
-            if partial => return 1
-            if !(binding.name and filter = binding.name.filter) => return 1
-            if !(range = filter.value) => return 1
-            if item.name in range => 1 else (((cfg.common or {}).subset or {}).opacity ? 0.2)
+          n.setAttribute \height, (scale.y.bandwidth! - 2) >? 1
+          n.setAttribute \x, scale.x(0)
 
-        # partial: 在同一格裡切出被選中的那一段, 不新增堆疊層 -
-        # 真正的 stack bar 上再疊一層「其它」會讓堆疊的語意打架
-        subsets = if !partial => [] else bars.filter (d) -> d.subset? and !d.dimmed
-        psel = d3.select @ .selectAll \rect.subset .data(subsets, (d,i) -> d.key)
-        psel.exit!remove!
-        psel.enter!append \rect
-          ..attr \class, \subset
-          ..attr \pointer-events, \none
-          ..attr(\width, (d,i) -> (scale.x.bandwidth! - 2) >? 1)  if type == \column
-          ..attr(\y, (d,i) -> scale.y(0))                         if type == \column
-          ..attr(\height, (d,i) -> (scale.y.bandwidth! - 2) >? 1) if type != \column
-          ..attr(\x, (d,i) -> scale.x(0))                         if type != \column
-        ptran = d3.select @ .selectAll \rect.subset
-          .transition!duration 350
-          .call (sel) ->
-            if cfg.multiple != \group => return
-            sel
-              ..attr(\x, (d,i) -> gap/2 + d.order * (scale.x.bandwidth! - gap) / bars.length) if type == \column
-              ..attr(\width, (d,i) -> (scale.x.bandwidth! - gap) / bars.length)               if type == \column
-              ..attr(\y, (d,i) -> Math.round(Math.min(scale.y(0), scale.y(d.subset))))          if type == \column
-              ..attr(\y, (d,i) -> gap/2 + d.order * (scale.y.bandwidth! - gap) / bars.length) if type != \column
-              ..attr(\height, (d,i) -> (scale.y.bandwidth! - gap) / bars.length)              if type != \column
-              ..attr(\x, (d,i) -> Math.round(Math.min(scale.x(0), scale.x(d.subset))))          if type != \column
-          .call (sel) ->
-            if cfg.multiple != \stack => return
-            sel
-              ..attr(\x, gap/2)                                                  if type == \column
-              ..attr(\width, (d,i) -> scale.x.bandwidth! - gap)                  if type == \column
-              ..attr(\y, (d,i) -> Math.round(Math.min(scale.y(d.offset), scale.y(d.offset + d.subset)))) if type == \column
-              ..attr(\y, gap/2)                                                  if type != \column
-              ..attr(\height, (d,i) -> scale.y.bandwidth! - gap)                 if type != \column
-              ..attr(\x, (d,i) -> Math.round(Math.min(scale.x(d.offset), scale.x(d.offset + d.subset)))) if type != \column
-        if type == \column =>
-          ptran.attr \height, (d,i) -> Math.round(Math.abs(scale.y(0) - scale.y(d.subset)))
-        else
-          ptran.attr \width, (d,i) -> Math.round(Math.abs(scale.x(0) - scale.x(d.subset)))
-        ptran.attr \fill, (d,i) -> color d
+      # 各種排列方式下, 一段 ( d ) 的目標位置. v 是要畫的量 ( 主值 d.size 或子集 d.subset )
+      geom = (d, v, removing) ->
+        col = type == \column
+        bw = if col => scale.x.bandwidth! else scale.y.bandwidth!
+        # 量的那一軸 ( 長條長度方向 ) 與分類那一軸
+        sv = if col => scale.y else scale.x
+        [pv, ps, cv, cs] = if col => <[y height x width]> else <[x width y height]>
+        a = {}
+        # group bar
+        if cfg.multiple == \group =>
+          a[cv] = gap/2 + d.order * (bw - gap) / bars.length
+          a[cs] = (bw - gap) / bars.length
+          a[pv] = Math.round(Math.min(sv(0), sv(v)))
+        # stack bar
+        else if cfg.multiple == \stack =>
+          a[cv] = gap/2
+          a[cs] = bw - gap
+          a[pv] = if removing => sv(d.offset + v/2)
+          else Math.round(Math.min(sv(d.offset), sv(d.offset + v)))
+        a[ps] = if removing => 0 else Math.round(Math.abs(sv(0) - sv(v)))
+        a
+
+      color = (d) -> tint.get d.name, (if cfg.color-variant => ((j/data.length) - 0.5) else 0)
+      fill = (d) ->
+        # legend 關掉的只降透明 ( 見下面 fill-opacity ), 顏色留著才認得出是哪一項
+        if !d.dimmed and partial and d.subset? => self.subset.color(color d) else color d
+      fill-opacity = (d) ->
+        if d.dimmed => return legend.opacity!
+        if partial => return 1
+        if !(binding.name and filter = binding.name.filter) => return 1
+        if !(range = filter.value) => return 1
+        if item.name in range => 1 else (((cfg.common or {}).subset or {}).opacity ? 0.2)
+
+      rj = join root: node, tag: \rect, cls: \data, data: bars, key: (d) -> d.key
+      # 離場的往中間縮成 0 再移除. 還沒縮完又回來的 ( 同一個 key ) 會被 join 接回去繼續用
+      rj.exit.map (n) ->
+        n.__data__._removing = true
+        tween n, geom(n.__data__, n.__data__.size, true), {remove: true}
+      # 子集那一層要蓋在主值上面, 新進場的主值插到它前面
+      first-subset = node.querySelector ':scope > rect.subset'
+      rj.enter.map (n) ->
+        if first-subset => node.insertBefore n, first-subset
+        init n
+      rj.nodes.map (n) ->
+        d = n.__data__
+        tween n, (geom(d, d.size) <<< {fill: fill(d), "fill-opacity": fill-opacity(d)})
+
+      # partial: 在同一格裡切出被選中的那一段, 不新增堆疊層 -
+      # 真正的 stack bar 上再疊一層「其它」會讓堆疊的語意打架
+      subsets = if !partial => [] else bars.filter (d) -> d.subset? and !d.dimmed
+      pj = join root: node, tag: \rect, cls: \subset, data: subsets, key: (d) -> d.key
+      pj.exit.map drop
+      pj.enter.map (n) ->
+        n.setAttribute \pointer-events, \none
+        init n
+      pj.nodes.map (n) ->
+        d = n.__data__
+        tween n, (geom(d, d.subset) <<< {fill: color(d)})
 
     if @cfg.brush.enabled =>
-      @g.brush.style \display, \block
-      @g.brush.call @brush
-    else @g.brush.style \display, \none
-    @g.brush.selectAll \rect.selection
-      .attr \shape-rendering, \auto
+      @g.brush.style.display = \block
+      @brush.attach @g.brush
+    else @g.brush.style.display = \none
+    @g.brush.querySelectorAll \rect.selection .forEach -> it.setAttribute \shape-rendering, \auto
     @legend.render!
     @yaxis.render!
     @xaxis.render!
