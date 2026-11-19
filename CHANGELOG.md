@@ -9,6 +9,8 @@
  - in bin mode the brush emits a range filter on `value` ( `{type: 'range', value: [x0, x1], closed}` )
    instead of bin labels, and an external range filter moves the brush to the overlapping bins.
  - in bin mode sorting is ignored ( bins keep their numeric order ).
+ - reset tint in `parse`, so colors used by the sample data don't push real series onto interpolated
+   colors ( same as pie / percent-list )
  - add `bin:*` test cases
 
 
