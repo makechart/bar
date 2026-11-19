@@ -7,6 +7,8 @@ module.exports =
     i18n:
       "zh-TW":
         "size": "長度"
+        "value": "數值 ( 分組 )"
+        "count": "筆數"
   init: ({root, context, t, pubsub}) ->
     pubsub.fire \init, mod: mod({context, t})
 
@@ -41,9 +43,13 @@ mod = ({context, t}) ->
     percent: type: \boolean, default: false
     dancing: type: \boolean, default: true
     gap: type: \number, default: 2, min: 0, max: 100, step: 1
+    # 打開而且有綁 value 時才有作用: 原始數值分組成區間 ( 直方圖 ), 見 @plotdb/chart utils/bin
+    bin: JSON.parse(JSON.stringify(chart.utils.config.preset.bin))
   dimension:
     size: {type: \R, multiple: true, name: "size"}
     name: {type: \NCO, name: "name"}
+    # 原始數值. bin.enabled 時依 bin 設定分組: name 變成區間, size 有綁是各組加總, 沒綁是筆數
+    value: {type: \R, name: "value"}
   init: ->
     @tint = tint = new chart.utils.tint!
     @svg.addEventListener \click, (e) ~>
@@ -57,7 +63,7 @@ mod = ({context, t}) ->
       if !@cfg.dancing or @cfg.percent => return
       idx = @align-idx or 0
       while true
-        @align-idx = ((@align-idx or 0) + 1) % (@binding.size.length + 1)
+        @align-idx = ((@align-idx or 0) + 1) % (@series.length + 1)
         if @legend.is-visible(@align-idx) or @align-idx == idx => break
       @resize!
       @render!
@@ -72,18 +78,20 @@ mod = ({context, t}) ->
       if !@cfg.brush.enabled => return
       range = e.selection
       if (_range = JSON.stringify(range)) == @range => return else @range = _range
-      if !range => @filter {name: undefined}, true
+      if !range => return @filter (if @binned => {value: undefined} else {name: undefined}), true
+      domain = @scale[@brush-type!]domain!
+      bandwidth = @scale[@brush-type!]bandwidth!
+      if @brush-type! == \x =>
+        range = range.map -> Math.floor(it / bandwidth) >? 0 <? (domain.length - 1)
       else
-        domain = @scale[@brush-type!]domain!
-        bandwidth = @scale[@brush-type!]bandwidth!
-        if @brush-type! == \x =>
-          range = range.map -> Math.floor(it / bandwidth) >? 0 <? (domain.length - 1)
-          ret = [range.0 to range.1].map -> domain[it]
-        else
-          box = @layout.get-box \view
-          range = range.map -> Math.floor((box.height - it) / bandwidth) >? 0 <? (domain.length - 1)
-          ret = [range.1 to range.0].map -> domain[it]
-        @filter {name: {type: 'index', value: ret}}, true
+        box = @layout.get-box \view
+        range = range.map -> Math.floor((box.height - it) / bandwidth) >? 0 <? (domain.length - 1)
+        range = [range.1, range.0]
+      # 分組模式: 對原始數值發區間 ( host 拿原始列篩 ), 不是區間標籤
+      if @binned =>
+        [a, b] = range.map ~> @data[it].bin.index
+        return @filter {value: chart.utils.bin.filter(a, b, @binned.info)}, true
+      @filter {name: {type: 'index', value: [range.0 to range.1].map -> domain[it]}}, true
     @brushs.x.on \end, (e) ~> if @brush-type! == \x => brush e
     @brushs.x.on \brush, (e) ~> if @brush-type! == \x => brush e
     @brushs.y.on \end, (e) ~> if @brush-type! == \y => brush e
@@ -140,19 +148,27 @@ mod = ({context, t}) ->
 
   destroy: -> if @tip => @tip.destroy!
 
+  filter-dims: -> if @binned => <[value]> else <[name]>
+
   filter: (filters, internal = false) ->
     @render!
     # internal = 這個 filter 就是 brush 自己發出來的, 不必再回頭動 brush
     if internal => return
     if !@brush or !@brush.attached! => return
-    f = (filters or {}).name
-    # 舊寫法: 直接給 brush 的像素區間
-    if Array.isArray f => return @brush.move f.map ~> @scale[@brush-type!](it)
     scale = @scale[@brush-type!]
     if !scale or !scale.domain => return
-    vs = (f or {}).value or []
     domain = scale.domain!
-    idx = (vs.map -> domain.indexOf it).filter -> it >= 0
+    if @binned =>
+      if !(\value of (filters or {})) => return
+      # 外面給的 range 換成重疊到的組, 再換成畫面上的位置 ( 空的組可能被拿掉, 所以要查 )
+      sel = chart.utils.bin.select (filters or {}).value, @binned.info
+      idx = if !sel => [] else @data.map((d, i) -> if d.bin.index >= sel.0 and d.bin.index <= sel.1 => i else -1).filter -> it >= 0
+    else
+      f = (filters or {}).name
+      # 舊寫法: 直接給 brush 的像素區間
+      if Array.isArray f => return @brush.move f.map ~> @scale[@brush-type!](it)
+      vs = (f or {}).value or []
+      idx = (vs.map -> domain.indexOf it).filter -> it >= 0
     if !idx.length => return @brush.move null
     [a, b] = [Math.min.apply(Math, idx), Math.max.apply(Math, idx)]
     bw = scale.bandwidth!
@@ -172,6 +188,16 @@ mod = ({context, t}) ->
       box = @layout.get-box \view
       @brush.move [box.height - (b + 1) * bw + 1, box.height - a * bw]
   parse: ->
+    # 配色是依「第幾個遇到的 key」分配的, 不重置的話範例資料用掉的色號會留著,
+    # 真實資料只好拿內插出來的顏色 - pie 與 percent-list 本來就有這一行
+    @tint.reset!
+    # 分組模式: data 整個換成各組 ( 核心已經掛好的 subset 不能用, bin.parse 會用同一組區間重算 )
+    @binned = if (@cfg.bin or {}).enabled and @binding.value => chart.utils.bin.parse.call @, {config: @cfg.bin} else null
+    if @binned => @data = @binned.data
+    # 長條的 series. 分組模式沒綁 size 時只有一條「筆數」
+    sb = @binding.size
+    @series = if sb and !Array.isArray(sb) => [sb] else (sb or [])
+    if @binned and !@series.length => @series = [{key: \count, name: t(\count)}]
     @data.map (d) -> d.size = d.size.map -> if isNaN(it) => 0 else it
     @align-idx = undefined
   resize: ->
@@ -181,19 +207,19 @@ mod = ({context, t}) ->
     @legend.config @cfg.legend
     # order reversed to make it visually aligned with bar.
     @legend.data [{
-      key: i, text: @binding.size[i].name or @binding.size[i].key
-    } for i from @binding.size.length - 1 to 0 by -1 ]
+      key: i, text: @series[i].name or @series[i].key
+    } for i from @series.length - 1 to 0 by -1 ]
     @layout.update false
 
     #@tip.toggle(if @cfg.{}tip.enabled? => @cfg.tip.enabled else true)
 
-    @max-per-group = @binding.size
+    @max-per-group = @series
       .filter (d,i) ~> @legend.is-visible(i)
       .map (d,i) ~> Math.max.apply(Math, @data.map -> it.size[i])
 
     # alternative align base. required for dancing stack
     if @cfg.align-idx and !@align-idx => @align-idx = @cfg.align-idx
-    align-idx = (if @cfg.percent => 0 else (@align-idx or 0)) <? @binding.size.length
+    align-idx = (if @cfg.percent => 0 else (@align-idx or 0)) <? @series.length
     @base-offset = @data.map (d) ~> [0 til align-idx].reduce(
       ((a,b) ~> a + if !@legend.is-visible b => 0 else d.size[b]),0
     ) or [0]
@@ -219,7 +245,8 @@ mod = ({context, t}) ->
       max = @max-per-group.reduce(((a,b) -> a + b),0)
     @order = @data.map (d,i) -> {key: d._idx, idx: i, name: d.name}
     @data.map (d,i) ~> d.sum = d.size.filter((d,i) ~> @legend.is-visible(i)).reduce(((a,b) -> a + b),0)
-    if @cfg.{}sort.enabled =>
+    # 分組的順序就是數值的順序, 不排
+    if @cfg.{}sort.enabled and !@binned =>
       @order.sort (a,b) ~>
         d = if @cfg.sort.dimension == \size => (@data[a.idx].sum - @data[b.idx].sum)
         else
@@ -242,8 +269,8 @@ mod = ({context, t}) ->
       yticks = if @cfg.bump => [1 to ((@parsed.length or 1) >? 1)]
       else @scale.y.ticks((@cfg.{}yaxis.tick.count or 4) <? max-tick)
       @yaxis.config @cfg.yaxis
-      v = @binding.size.0 or {}
-      if @binding.size.length > 1 => @yaxis.caption( if v.unit => "#{v.unit}" else '')
+      v = @series.0 or {}
+      if @series.length > 1 => @yaxis.caption( if v.unit => "#{v.unit}" else '')
       else @yaxis.caption( (v.name or v.key or '') + if v.unit => "(#{v.unit})" else '')
       @yaxis.ticks yticks
       @yaxis.scale @scale.y
@@ -251,8 +278,8 @@ mod = ({context, t}) ->
       @xaxis.ticks @data.map -> it.name
       @xaxis.scale @scale.x
       @xaxis.caption(
-        if @binding.name =>
-          (that.name or that.key or '') + (if that.unit => "(#{@binding.name.unit})" else '')
+        if (b = if @binned => @binding.value else @binding.name) =>
+          (b.name or b.key or '') + (if b.unit => "(#{b.unit})" else '')
         else ''
       )
     else
@@ -263,8 +290,8 @@ mod = ({context, t}) ->
       xticks = if @cfg.bump => [1 to ((@parsed.length or 1) >? 1)]
       else @scale.x.ticks((@cfg.{}xaxis.tick.count or 4) <? max-tick)
       @xaxis.config @cfg.xaxis
-      v = @binding.size.0 or {}
-      if @binding.size.length > 1 => @xaxis.caption( if v.unit => "#{v.unit}" else '')
+      v = @series.0 or {}
+      if @series.length > 1 => @xaxis.caption( if v.unit => "#{v.unit}" else '')
       else @xaxis.caption( (v.name or v.key or '') + if v.unit => "(#{v.unit})" else '')
       @xaxis.ticks xticks
       @xaxis.scale @scale.x
@@ -272,8 +299,8 @@ mod = ({context, t}) ->
       @yaxis.ticks @data.map -> it.name
       @yaxis.scale @scale.y
       @yaxis.caption(
-        if @binding.name =>
-          (that.name or that.key or '') + (if that.unit => "(#{@binding.name.unit})" else '')
+        if (b = if @binned => @binding.value else @binding.name) =>
+          (b.name or b.key or '') + (if b.unit => "(#{b.unit})" else '')
         else ''
       )
 
@@ -295,7 +322,7 @@ mod = ({context, t}) ->
     else @brush.extent [[1, 0],[box.width - 2, box.height]]
 
   render: ->
-    {binding, scale, range, delta, base-offset, max-per-group, cfg, tint, data, type, legend} = @
+    {binding, series, scale, range, delta, base-offset, max-per-group, cfg, tint, data, type, legend, binned} = @
     self = @
     # 所有補間都走 chart 的時鐘 ( @anim ), manual 模式下可以逐格錄
     tween = (n, attrs, opt) ~> @anim.tween n, attrs, opt
@@ -339,8 +366,8 @@ mod = ({context, t}) ->
           offset: offset / sum
           key: key
           group: item.name
-          name: binding.size[key].name or binding.size[key].key
-          unit: binding.size[key].unit or ''
+          name: series[key].name or series[key].key
+          unit: series[key].unit or ''
           order: bars.length
           subset: (if item.subset => ((item.subset.size or [])[idx] or 0) / sum else null)
           # legend 關掉但 legend.subset.mode 是 dim: 位置與總量都留著, 只是灰掉
@@ -391,9 +418,14 @@ mod = ({context, t}) ->
       fill-opacity = (d) ->
         if d.dimmed => return legend.opacity!
         if partial => return 1
+        dim = (((cfg.common or {}).subset or {}).opacity ? 0.2)
+        if binned =>
+          if !(binding.value and filter = binding.value.filter) => return 1
+          if !(sel = chart.utils.bin.select filter, binned.info) => return dim
+          return if item.bin.index >= sel.0 and item.bin.index <= sel.1 => 1 else dim
         if !(binding.name and filter = binding.name.filter) => return 1
         if !(range = filter.value) => return 1
-        if item.name in range => 1 else (((cfg.common or {}).subset or {}).opacity ? 0.2)
+        if item.name in range => 1 else dim
 
       rj = join root: node, tag: \rect, cls: \data, data: bars, key: (d) -> d.key
       # 離場的往中間縮成 0 再移除. 還沒縮完又回來的 ( 同一個 key ) 會被 join 接回去繼續用

@@ -14,6 +14,14 @@ fruit = (n = 11, opt = {}) ->
     size: cats.map (k) -> {key: k, unit: \KG}
     name: {key: \name}
 
+# 0 ~ 100 的成績, 中間多兩邊少
+scores = ->
+  r = mctest.random 9
+  raw: [0 til 200].map (i) ->
+    score = Math.round(((r! + r! + r!) / 3) * 100)
+    {id: "s#i", score, hours: +(r! * 5).toFixed(1), extra: +(r! * 2).toFixed(1)}
+  binding: value: {key: \score, name: "score"}
+
 subset-of = (d) ->
   r = mctest.random 3
   d.subset = d.raw.map (row) ->
@@ -36,6 +44,23 @@ data =
     d
   empty: {raw: [], binding: fruit!binding}
   subset: subset-of fruit!
+  # 直方圖: 原始數值, 沒有分組過. 綁 value 就會自動分組
+  scores: scores!
+  # 有綁 size: 各組加總而不是計數 ( 兩個 series )
+  weighted: do ->
+    d = scores!
+    d.binding.size = [{key: \hours, unit: \h}, {key: \extra, unit: \h}]
+    d
+  # 連續值 ( 小數 )
+  height: do ->
+    r = mctest.random 5
+    raw: [0 til 120].map -> {cm: +(150 + (r! + r! + r! + r!) * 10).toFixed(1)}
+    binding: value: {key: \cm, unit: \cm}
+  # 子集也是原始列, 要用同一組區間分
+  ssub: do ->
+    d = scores!
+    d.subset = d.raw.filter (r, i) -> i % 3 == 0
+    d
 
 cases = []
 
@@ -89,6 +114,43 @@ cases ++= [
       * (c) ->
           f = c._mctest-filter[* - 1]
           if !(f and f.name and f.name.value.length) => throw new Error("drag 之後沒有發 filter")
+]
+
+# 直方圖 ( 綁 value 時自動分組 )
+cases ++= [
+  * name: "bin:auto", data: \scores, config: {gap: 0, bin: {enabled: true}}
+  * name: "bin:width=10", data: \scores, config: {gap: 0, bin: {enabled: true, width: 10}}
+  * name: "bin:width=10,closed=right", data: \scores, config: {gap: 0, bin: {enabled: true, width: 10, closed: \right}}
+  * name: "bin:anchor=5", data: \scores, config: {gap: 0, bin: {enabled: true, width: 10, anchor: 5}}
+  * name: "bin:label=center", data: \scores, config: {gap: 0, bin: {enabled: true, width: 10, label: \center}}
+  * name: "bin:label=start,format", data: \height, config: {gap: 0, bin: {enabled: true, width: 2.5, label: \start, format: \.1f}}
+  * name: "bin:continuous", data: \height, config: {gap: 0, bin: {enabled: true}}
+  * name: "bin:empty=false", data: \scores, config: {gap: 0, bin: {enabled: true, width: 4, empty: false}}
+  * name: "bin:weighted", data: \weighted, config: {gap: 0, bin: {enabled: true, width: 10}}
+  * name: "bin:type=bar", data: \scores, config: {type: \bar, gap: 0, bin: {enabled: true, width: 10}}
+  * name: "bin:subset-partial", data: \ssub, config: {gap: 0, bin: {enabled: true, width: 10}, common: {subset: {mode: \partial}}}
+  * name: "bin:subset-shrink", data: \ssub, config: {gap: 0, bin: {enabled: true, width: 10}, common: {subset: {mode: \shrink}}}
+
+  # 外部給原始數值的區間 -> brush 框到重疊的組
+  * name: "bin:filter-external", data: \scores, config: {gap: 0, bin: {enabled: true, width: 10}}
+    steps:
+      * (c, ctx) ->
+          c.filter {value: {type: \range, value: [40, 70], closed: \left}}
+          ctx.snap \filtered
+      * (c) -> c.filter {value: undefined}
+
+  # 拖 brush: 發的是原始數值的區間 ( range ), 不是組的標籤
+  * name: "bin:brush-drag", data: \scores, config: {gap: 0, bin: {enabled: true, width: 10}}
+    steps:
+      * (c, ctx) ->
+          c._mctest-filter = []
+          c.on \filter, -> c._mctest-filter.push it
+          ctx.drag ctx.root.querySelector('rect.overlay'), [0.25, 0.5], [0.55, 0.5]
+      * (c) ->
+          f = (c._mctest-filter[* - 1] or {}).value
+          if !(f and f.type == \range and f.value.length == 2) => throw new Error("drag 之後沒有發 range filter")
+          if !(f.value.0 < f.value.1 and f.value.0 % 10 == 0 and f.value.1 % 10 == 0) =>
+            throw new Error("range 沒有對齊組的邊界: #{JSON.stringify f}")
 ]
 
 # crossfilter: 兩張 bar 用 @plotdb/dash 串起來
