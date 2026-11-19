@@ -1,5 +1,19 @@
 # Change Logs
 
+## v0.0.10
+
+ - histogram from raw values: new `value` dimension and `bin` config ( `chart.utils.config.preset.bin` ).
+   when `bin.enabled` and `value` is bound, values are grouped into bins by `chart.utils.bin`
+   ( needs `@plotdb/chart` >= 3.10.0 ): `name` becomes the bin label, `size` is summed per bin
+   when bound, otherwise rows are counted. subset rows are binned with the same edges.
+ - in bin mode the brush emits a range filter on `value` ( `{type: 'range', value: [x0, x1], closed}` )
+   instead of bin labels, and an external range filter moves the brush to the overlapping bins.
+ - in bin mode sorting is ignored ( bins keep their numeric order ).
+ - reset tint in `parse`, so colors used by the sample data don't push real series onto interpolated
+   colors ( same as pie / percent-list )
+ - add `bin:*` test cases
+
+
 ## v0.0.9
 
  - extend the lite base ( `@makechart/base` `lite/index.html`, no d3 ): needs `@makechart/base` >= 0.2.0
