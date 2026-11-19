@@ -1,5 +1,14 @@
 # Change Logs
 
+## v0.0.11
+
+ - mark the `value` dimension `passive`, so editors' auto-binding leaves it alone ( a frequency table would
+   otherwise get a column bound to `value` and fall into bin mode ). bind it by hand for raw data.
+ - in bin mode, `size` bound to the same field as `value` is ignored and rows are counted
+   ( needs `@plotdb/chart` >= 3.10.1 )
+ - add test cases: `bin:size-same-as-value`, `dash:hist-*` ( histogram on raw rows crossfiltering a bar )
+
+
 ## v0.0.10
 
  - histogram from raw values: new `value` dimension and `bin` config ( `chart.utils.config.preset.bin` ).

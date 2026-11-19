@@ -48,8 +48,9 @@ mod = ({context, t}) ->
   dimension:
     size: {type: \R, multiple: true, name: "size"}
     name: {type: \NCO, name: "name"}
-    # 原始數值. bin.enabled 時依 bin 設定分組: name 變成區間, size 有綁是各組加總, 沒綁是筆數
-    value: {type: \R, name: "value"}
+    # 原始數值. bin.enabled 時依 bin 設定分組: name 變成區間, size 有綁是各組加總, 沒綁是筆數.
+    # passive: 編輯器自動綁定時跳過 - 不然次數分配表會被補一個欄位上來, 誤進分組模式
+    value: {type: \R, name: "value", passive: true}
   init: ->
     @tint = tint = new chart.utils.tint!
     @svg.addEventListener \click, (e) ~>
@@ -197,6 +198,8 @@ mod = ({context, t}) ->
     # 長條的 series. 分組模式沒綁 size 時只有一條「筆數」
     sb = @binding.size
     @series = if sb and !Array.isArray(sb) => [sb] else (sb or [])
+    # 跟 value 同一欄的 size 在分組時不算 ( bin.parse 也略過了 ), 只留它用到的那幾欄
+    if @binned => @series = @binned.keep.map ~> @series[it]
     if @binned and !@series.length => @series = [{key: \count, name: t(\count)}]
     @data.map (d) -> d.size = d.size.map -> if isNaN(it) => 0 else it
     @align-idx = undefined

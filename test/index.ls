@@ -51,6 +51,11 @@ data =
     d = scores!
     d.binding.size = [{key: \hours, unit: \h}, {key: \extra, unit: \h}]
     d
+  # 編輯器自動綁定常把唯一的數值欄也給 size: 跟 value 同一欄時要算筆數, 不是加總
+  same: do ->
+    d = scores!
+    d.binding.size = [{key: \score}]
+    d
   # 連續值 ( 小數 )
   height: do ->
     r = mctest.random 5
@@ -127,6 +132,11 @@ cases ++= [
   * name: "bin:continuous", data: \height, config: {gap: 0, bin: {enabled: true}}
   * name: "bin:empty=false", data: \scores, config: {gap: 0, bin: {enabled: true, width: 4, empty: false}}
   * name: "bin:weighted", data: \weighted, config: {gap: 0, bin: {enabled: true, width: 10}}
+  * name: "bin:size-same-as-value", data: \same, config: {gap: 0, bin: {enabled: true, width: 10}}
+    steps: [(c) ->
+      if c.data.0.size.length != 1 or c.data.reduce(((a, d) -> a + d.size.0), 0) != c.raw.length =>
+        throw new Error("size 跟 value 同一欄時應該是筆數")
+    ]
   * name: "bin:type=bar", data: \scores, config: {type: \bar, gap: 0, bin: {enabled: true, width: 10}}
   * name: "bin:subset-partial", data: \ssub, config: {gap: 0, bin: {enabled: true, width: 10}, common: {subset: {mode: \partial}}}
   * name: "bin:subset-shrink", data: \ssub, config: {gap: 0, bin: {enabled: true, width: 10}, common: {subset: {mode: \shrink}}}
@@ -198,6 +208,41 @@ cases ++= [
           ctx.drag ctx.root.querySelector('rect.overlay'), [0.05, 0.5], [0.5, 0.5]
       * (b) ->
           if !b.filter-of(\region) => throw new Error("brush 之後 board 沒有 region 的 filter")
+]
+
+# 直方圖 x 長條: 直方圖吃原始列 ( data.raw ), brush 發的是 amount 的區間
+hist-def =
+  data: {type: \inline, rows}
+  layout: {col: <[1fr 1fr]>, row: <[1fr]>, gap: \8px}
+  panels:
+    * id: \hist, title: "amount"
+      chart: {name: "@makechart/bar"}
+      # raw 模式推不出 binding ( meta.fields 是空的 ), 要明寫
+      data: {raw: true, compare: {exclude-self: true}}
+      binding: {value: {key: \amount}}
+      cfg: {gap: 0, bin: {enabled: true, width: 10}, common: {subset: {mode: \partial}}, legend: {enabled: false}}
+    * id: \region, title: "region"
+      chart: {name: "@makechart/bar"}
+      data: {groupby: \region, measures: [{name: \amount, field: \amount, op: \sum}]}
+      compare: {exclude-self: true}
+      cfg: {common: {subset: {mode: \partial}}, legend: {enabled: false}}
+
+cases ++= [
+  * name: "dash:hist-init", dash: {def: hist-def, size: [900, 320]}
+  # 拖直方圖的 brush: board 收到 amount 的 range ( 對齊組的邊界, 左閉 ), region 那張畫出子集
+  * name: "dash:hist-brush", dash: {def: hist-def, size: [900, 320]}
+    steps:
+      * (b, ctx) ->
+          ctx.drag ctx.root.querySelector('rect.overlay'), [0.3, 0.5], [0.6, 0.5]
+      * (b, ctx) ->
+          f = b.filter-of \hist, \value
+          if !(f and f.type == \range and f.field == \amount and f.closed == \left) =>
+            throw new Error("brush 之後 board 沒有 amount 的 range filter: #{JSON.stringify f}")
+          if !(f.values.0 % 10 == 0 and f.values.1 % 10 == 0) => throw new Error("range 沒有對齊組的邊界: #{JSON.stringify f}")
+          ctx.snap \brushed
+  # 反向: region 篩選 -> 直方圖用同一組區間畫子集
+  * name: "dash:hist-subset", dash: {def: hist-def, size: [900, 320]}
+    steps: [(b) -> b.set-filter \region, {field: \region, values: <[North]>}]
 ]
 
 mctest.suite {data, cases, size: [480, 300]}
