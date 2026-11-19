@@ -163,6 +163,59 @@ cases ++= [
             throw new Error("range 沒有對齊組的邊界: #{JSON.stringify f}")
 ]
 
+# 參考線 ( common.annotation.reference, 靠 mod.space 換座標 )
+ref = (...rs) -> {common: {annotation: {reference: rs}}}
+# 參考線畫在哪: 回傳 [x1, y1, x2, y2]. 驗算用, 不靠 snapshot 也看得出位置對不對
+ref-lines = (c) -> Array.from(c.svg.querySelectorAll('g[data-type=annotation] line')).map (l) ->
+  <[x1 y1 x2 y2]>.map -> +l.getAttribute(it)
+near = (a, b) -> Math.abs(a - b) < 0.5
+
+cases ++= [
+  * name: "ref:value-axis", config: ref({axis: \y, value: 20, label: "target"})
+    steps: [(c) ->
+      ls = ref-lines c
+      box = c.layout.get-box \view
+      if !(ls.length == 1 and near(ls.0.1, box.y + c.scale.y(20))) => throw new Error("參考線不在 y = 20: #{JSON.stringify ls}")
+    ]
+  * name: "ref:type=bar", config: ({type: \bar} <<< ref({axis: \x, value: 20, label: "target"}))
+  * name: "ref:category", config: ref({axis: \x, value: \Y1999, label: "Y1999"})
+    steps: [(c) ->
+      ls = ref-lines c
+      box = c.layout.get-box \view
+      x = box.x + c.scale.x(\Y1999) + c.scale.x.bandwidth! / 2
+      if !(ls.length == 1 and near(ls.0.0, x)) => throw new Error("參考線不在 Y1999 那一格的中間: #{JSON.stringify ls}")
+    ]
+  # 值域外的不畫 ( 標籤也不畫 )
+  * name: "ref:out-of-range", config: ref({axis: \y, value: 1000, label: "way up"}, {axis: \x, value: \nope})
+    steps: [(c) ->
+      if ref-lines(c).length => throw new Error("值域外的參考線不該畫")
+      if c.svg.querySelector('g[data-type=annotation] text') => throw new Error("值域外的標籤不該畫")
+    ]
+  # 分組模式: 數值落在組內依比例內插. 62.5 在 60-69 那組 ( [60, 70) ) 的 1/4 處
+  * name: "ref:bin", data: \scores, config: ({gap: 0, bin: {enabled: true, width: 10}} <<< ref(
+      {axis: \x, value: 62.5, label: "mean"}
+      {axis: \y, value: 30, label: "30"}
+    ))
+    steps: [(c) ->
+      [lx] = ref-lines c
+      box = c.layout.get-box \view
+      d = c.data.find -> it.bin.x0 == 60
+      x = box.x + c.scale.x(d.name) + c.scale.x.bandwidth! * 0.25
+      if !(lx and near(lx.0, x)) => throw new Error("62.5 沒有畫在 60-69 的 1/4 處: #{JSON.stringify lx} vs #x")
+    ]
+  # 橫條: 第一組在最下面, 組內也要反過來 ( 數值越大越上面 )
+  * name: "ref:bin,type=bar", data: \scores, config: ({type: \bar, gap: 0, bin: {enabled: true, width: 10}} <<< ref(
+      {axis: \y, value: 62.5, label: "mean"}
+    ))
+    steps: [(c) ->
+      [ly] = ref-lines c
+      box = c.layout.get-box \view
+      d = c.data.find -> it.bin.x0 == 60
+      y = box.y + c.scale.y(d.name) + c.scale.y.bandwidth! * 0.75
+      if !(ly and near(ly.1, y)) => throw new Error("62.5 沒有畫在 60-69 由下往上的 1/4 處: #{JSON.stringify ly} vs #y")
+    ]
+]
+
 # crossfilter: 兩張 bar 用 @plotdb/dash 串起來
 rows = do ->
   r = mctest.random 11

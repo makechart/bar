@@ -15,6 +15,29 @@ module.exports =
 # 刷選框自己的節點 ( __data__.type ). hover 打到這些就往下找真正的 bar
 brush-parts = <[overlay selection w e n s]>
 
+# 資料值 -> 繪圖區座標 ( @plotdb/chart 的 space scope, 參考線用 ). 以圖表為 this 呼叫.
+#  - 數值軸 ( linear ): 直接換
+#  - 類別軸 ( band ): 給類別名稱就取那一格的中間
+#  - 分組模式的類別軸: 給數值, 找出落在哪一組再在組內依比例內插 - 平均值、及格線才會畫在對的位置.
+#    band 的 range 反過來 ( 橫條: 第一組在最下面 ) 時組內也要反過來
+# bin 由呼叫端給 ( chart.utils.bin ) - 這裡在 mod 外面, 拿不到 context 裡的 chart
+space-of = (bin, dir, v) ->
+  if !(s = (@scale or {})[dir]) => return null
+  if !s.bandwidth =>
+    return if !(v?) or v == '' or isNaN(+v) => null else s(+v)
+  bw = s.bandwidth!
+  r = s.range!
+  if !@binned =>
+    p = s(v)
+    return if !(p?) or isNaN(p) => null else p + bw / 2
+  if !(v?) or v == '' or isNaN(v = +v) => return null
+  info = @binned.info
+  if (i = bin.index v, info) < 0 => return null
+  # empty = false 時空的組不在畫面上, 落在那裡就沒有位置
+  if !(d = @data.find (d) -> d.bin.index == i) => return null
+  f = (v - info.edges[i]) / (info.edges[i + 1] - info.edges[i])
+  s(d.name) + bw * (if r.0 > r[r.length - 1] => 1 - f else f)
+
 mod = ({context, t}) ->
   {chart} = context
   {scale: Scale, brush: Brush, format, debounce, anim: {join}} = chart.utils
@@ -150,6 +173,10 @@ mod = ({context, t}) ->
   destroy: -> if @tip => @tip.destroy!
 
   filter-dims: -> if @binned => <[value]> else <[name]>
+
+  space:
+    x: (v) -> space-of.call @, chart.utils.bin, \x, v
+    y: (v) -> space-of.call @, chart.utils.bin, \y, v
 
   filter: (filters, internal = false) ->
     @render!

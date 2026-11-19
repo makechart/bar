@@ -1,5 +1,14 @@
 # Change Logs
 
+## v0.0.12
+
+ - implement the `space` scope ( `mod.space` ), so `common.annotation.reference` draws reference lines
+   ( needs `@plotdb/chart` >= 3.11.0; older versions never call it ). value axis maps the number,
+   category axis takes a category name ( center of its band ), and in bin mode a number is placed inside
+   its bin proportionally ( reversed for horizontal bars ). values outside the plot return null and are skipped.
+ - add `ref:*` test cases
+
+
 ## v0.0.11
 
  - mark the `value` dimension `passive`, so editors' auto-binding leaves it alone ( a frequency table would
