@@ -4,10 +4,12 @@
 
 rnd = mctest.random 7
 cats = <[apple banana peach orange]>
+# opt.seed: 用自己的亂數. 在 step 裡 ( 執行時 ) 產生的資料要帶, 否則數字會隨之前跑過哪些 case 而變
 fruit = (n = 11, opt = {}) ->
+  g = if opt.seed? => mctest.random opt.seed else rnd
   raw: [0 til n].map (i) ->
     r = {name: "Y#{1995 + i}"}
-    for k in cats => r[k] = +(rnd! * 10).toFixed(1)
+    for k in cats => r[k] = +(g! * 10).toFixed(1)
     if opt.neg => r.banana = -r.banana
     r
   binding:
@@ -96,7 +98,7 @@ cases ++= [
 
   # 換資料: 舊的縮掉、新的長出來 ( 動畫 flush 到終點 )
   * name: "update:new-data"
-    steps: [(c) -> d = fruit 7; c.set-raw d.raw, d.binding]
+    steps: [(c) -> d = fruit 7, seed: 17; c.set-raw d.raw, d.binding]
 
   # 直條換橫條時 brush 的拉桿要跟著換方向
   * name: "update:column-to-bar"
@@ -143,11 +145,11 @@ cases ++= [
     steps:
       * (c, ctx) -> ctx.drag ctx.root.querySelector('rect.overlay'), [0.3, 0.5], [0.3, 0.5], 0
       * (c) ->
-          d = fruit 5
+          d = fruit 5, seed: 13
           c.set-raw d.raw, d.binding
       * (c) ->
           if c.align-idx != 1 => throw new Error("set-raw 之後對齊被重設: #{c.align-idx}")
-          d = fruit 5
+          d = fruit 5, seed: 13
           d.binding.size = [d.binding.size.0]
           c.set-raw d.raw, d.binding
       * (c) -> if c.align-idx => throw new Error("series 換了對齊沒有重設: #{c.align-idx}")
