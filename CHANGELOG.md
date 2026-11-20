@@ -1,5 +1,15 @@
 # Change Logs
 
+## v0.0.13
+
+ - fix bug: with both `dancing` and `brush` on ( the defaults ), clicking the plot to clear a brush selection
+   also switched the dancing alignment. a click that starts on the brush while it has a selection now only
+   clears the selection
+ - keep the dancing alignment across `parse` ( e.g. `set-raw` when another chart in a dashboard filters ).
+   it is reset only when the series change
+ - add `dancing:*` test cases
+
+
 ## v0.0.12
 
  - implement the `space` scope ( `mod.space` ), so `common.annotation.reference` draws reference lines

@@ -76,7 +76,13 @@ mod = ({context, t}) ->
     value: {type: \R, name: "value", passive: true}
   init: ->
     @tint = tint = new chart.utils.tint!
+    # brush 有選取時, 在繪圖區點一下是清掉選取 ( brush 的手勢 ), 不是要換 dancing 的對齊.
+    # brush 只會吞掉拖曳後的 click, 這種沒拖的點擊要自己判斷: 按下時就記住當時有沒有選取
+    @svg.addEventListener \pointerdown, (e) ~>
+      @_clear-brush = (((e.target or {}).__data__ or {}).type in brush-parts) and !!(@brush and @brush.selection!)
+    , true
     @svg.addEventListener \click, (e) ~>
+      if @_clear-brush => return @_clear-brush = false
       n = e.target
       while n != @svg
         if !n => return
@@ -229,7 +235,10 @@ mod = ({context, t}) ->
     if @binned => @series = @binned.keep.map ~> @series[it]
     if @binned and !@series.length => @series = [{key: \count, name: t(\count)}]
     @data.map (d) -> d.size = d.size.map -> if isNaN(it) => 0 else it
-    @align-idx = undefined
+    # dancing 的對齊是使用者點出來的, 只有 series 換了才重設. 儀表板裡別的圖一篩選就會重新 set-raw, 不能每次都清掉
+    sig = JSON.stringify @series.map -> it.key
+    if sig != @_series-sig => @align-idx = undefined
+    @_series-sig = sig
   resize: ->
     @root.querySelector('.pdl-layout').classList.toggle \legend-bottom, @cfg.legend.position == \bottom
     @type = @cfg.type or \column

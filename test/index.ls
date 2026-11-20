@@ -121,6 +121,38 @@ cases ++= [
           if !(f and f.name and f.name.value.length) => throw new Error("drag 之後沒有發 filter")
 ]
 
+# dancing ( 點繪圖區換對齊的 series ) 與 brush 都預設開著, 兩者共用繪圖區的點擊
+cases ++= [
+  # 沒有選取時點一下: 照常換對齊. 點擊 = 按下放開, 中間沒有 move ( 有 move 就算拖過, brush 會吞掉 click )
+  * name: "dancing:click"
+    steps:
+      * (c, ctx) -> ctx.drag ctx.root.querySelector('rect.overlay'), [0.3, 0.5], [0.3, 0.5], 0
+      * (c) -> if c.align-idx != 1 => throw new Error("點擊沒有換對齊: #{c.align-idx}")
+  # 有選取時在選取框外點一下是清掉選取, 不該換對齊
+  * name: "dancing:brush-clear"
+    steps:
+      * (c, ctx) -> ctx.drag ctx.root.querySelector('rect.overlay'), [0.1, 0.5], [0.45, 0.5]
+      * (c, ctx) ->
+          if !c.brush.selection! => throw new Error("drag 之後沒有選取")
+          ctx.drag ctx.root.querySelector('rect.overlay'), [0.7, 0.5], [0.7, 0.5], 0
+      * (c) ->
+          if c.brush.selection! => throw new Error("點擊沒有清掉選取")
+          if c.align-idx => throw new Error("清選取時換了對齊: #{c.align-idx}")
+  # 重新餵資料 ( 儀表板裡別的圖篩選時 ) 對齊要留著; series 換了才重設
+  * name: "dancing:keep-on-set-raw"
+    steps:
+      * (c, ctx) -> ctx.drag ctx.root.querySelector('rect.overlay'), [0.3, 0.5], [0.3, 0.5], 0
+      * (c) ->
+          d = fruit 5
+          c.set-raw d.raw, d.binding
+      * (c) ->
+          if c.align-idx != 1 => throw new Error("set-raw 之後對齊被重設: #{c.align-idx}")
+          d = fruit 5
+          d.binding.size = [d.binding.size.0]
+          c.set-raw d.raw, d.binding
+      * (c) -> if c.align-idx => throw new Error("series 換了對齊沒有重設: #{c.align-idx}")
+]
+
 # 直方圖 ( 綁 value 時自動分組 )
 cases ++= [
   * name: "bin:auto", data: \scores, config: {gap: 0, bin: {enabled: true}}
