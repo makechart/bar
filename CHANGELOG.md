@@ -1,5 +1,13 @@
 # Change Logs
 
+## v0.0.14
+
+ - declare `interactions` ( needs `@plotdb/chart` >= 3.16.0 ): only the brush filters ( `name`, or `value` in
+   bin mode ). clicking a bar switches the dancing alignment, it does not filter
+ - add `interactions:*` test cases
+ - update the 7 `dash:*` snapshots for the new `@plotdb/dash` panel markup ( `ld-scope`, `ld=panel`, hint ).
+   no change to bar itself
+
 ## v0.0.13
 
  - fix bug: with both `dancing` and `brush` on ( the defaults ), clicking the plot to clear a brush selection

@@ -155,6 +155,18 @@ cases ++= [
       * (c) -> if c.align-idx => throw new Error("series 換了對齊沒有重設: #{c.align-idx}")
 ]
 
+# chart.interactions! ( 哪個操作會發哪幾維的 filter ) 要等於 want
+interactions-is = (want) -> (c) ->
+  got = JSON.stringify c.interactions!
+  if got != JSON.stringify(want) => throw new Error("interactions: #got, 應為 #{JSON.stringify want}")
+
+# 只有 brush 會發 filter ( 點柱子是換對齊 ); brush 關掉就沒有操作能篩. 直方圖發的是 value
+cases ++= [
+  * name: "interactions:brush", steps: [interactions-is {brush: <[name]>}]
+  * name: "interactions:no-brush", config: {brush: {enabled: false}}, steps: [interactions-is {}]
+  * name: "interactions:bin", data: \scores, config: {gap: 0, bin: {enabled: true}}, steps: [interactions-is {brush: <[value]>}]
+]
+
 # 直方圖 ( 綁 value 時自動分組 )
 cases ++= [
   * name: "bin:auto", data: \scores, config: {gap: 0, bin: {enabled: true}}

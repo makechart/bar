@@ -179,6 +179,8 @@ mod = ({context, t}) ->
   destroy: -> if @tip => @tip.destroy!
 
   filter-dims: -> if @binned => <[value]> else <[name]>
+  # 只有 brush 會發 filter. 點柱子是換對齊 ( dancing ), 點圖例只是顯示 / 隱藏 series
+  interactions: -> if @cfg.brush.enabled => {brush: @filter-dims!} else {}
 
   space:
     x: (v) -> space-of.call @, chart.utils.bin, \x, v
