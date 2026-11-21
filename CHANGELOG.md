@@ -1,5 +1,12 @@
 # Change Logs
 
+## v0.0.16
+
+ - declare `tabinfo`, the section descriptions ( needs `@plotdb/chart` >= 3.17.0 ): the axis / legend / bin
+   presets via `chart.utils.config.tab`, plus `sort` and `brush`
+ - add a `tabinfo` test case: every path must name a section in `mod.config`
+
+
 ## v0.0.15
 
  - add `desc` ( en / zh-TW ) to the config items, shown under the label in the makechart style panel
