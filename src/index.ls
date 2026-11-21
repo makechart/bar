@@ -56,16 +56,16 @@ mod = ({context, t}) ->
     yaxis: JSON.parse(JSON.stringify(chart.utils.config.preset.axis))
   } <<< chart.utils.config.preset.default <<<
     sort:
-      enabled: type: \boolean, default: false
-      dir: type: \choice, values: <[asc desc]>, default: \asc
-      dimension: type: \choice, values: <[name size]>, default: \size
-    type: type: \choice, values: <[bar column]>, default: \column
+      enabled: type: \boolean, default: false, desc: {en: "sort the bars instead of keeping the data order ( ignored when bin is on )", "zh-TW": "把長條排序，而不是照資料原本的順序 ( 開啟 bin 分組時不作用 )"}
+      dir: type: \choice, values: <[asc desc]>, default: \asc, desc: {en: "sort direction: asc puts the smallest first, desc the largest first", "zh-TW": "排序方向：asc 由小到大，desc 由大到小"}
+      dimension: type: \choice, values: <[name size]>, default: \size, desc: {en: "what to sort by: name sorts by the category name, size by the total of the visible series", "zh-TW": "依什麼排序：name 依類別名稱，size 依目前顯示的系列加總"}
+    type: type: \choice, values: <[bar column]>, default: \column, desc: {en: "bar draws horizontal bars, column draws vertical bars", "zh-TW": "bar 畫橫向長條，column 畫直向長條"}
     brush:
-      enabled: type: \boolean, default: true
-    multiple: type: \choice, values: <[stack group]>, default: \stack
-    percent: type: \boolean, default: false
-    dancing: type: \boolean, default: true
-    gap: type: \number, default: 2, min: 0, max: 100, step: 1
+      enabled: type: \boolean, default: true, desc: {en: "drag across the chart to select a range of categories, to filter other charts on a dashboard", "zh-TW": "在圖上拖拉選取一段類別，用來篩選儀表板上的其他圖"}
+    multiple: type: \choice, values: <[stack group]>, default: \stack, desc: {en: "how several series are drawn: stack piles them into one bar, group puts them side by side", "zh-TW": "多個系列怎麼畫：stack 疊成一根長條，group 並排"}
+    percent: type: \boolean, default: false, desc: {en: "draw each series as a share of its bar's total, so stacked bars all reach 100%", "zh-TW": "以各系列佔該長條總和的比例來畫，堆疊的長條都會到 100%"}
+    dancing: type: \boolean, default: true, desc: {en: "click the chart to line up the stacked bars on the next series in turn, so that series is easy to compare ( stack mode, not with percent )", "zh-TW": "點擊圖表時，依序改以下一個系列為基準對齊堆疊的長條，方便比較該系列 ( 用於 stack，開啟 percent 時不作用 )"}
+    gap: type: \number, default: 2, min: 0, max: 100, step: 1, desc: {en: "space between bars ( px ); in group mode, the space between groups", "zh-TW": "長條之間的間距 ( px )；group 模式下是每組之間的間距"}
     # 打開而且有綁 value 時才有作用: 原始數值分組成區間 ( 直方圖 ), 見 @plotdb/chart utils/bin
     bin: JSON.parse(JSON.stringify(chart.utils.config.preset.bin))
   dimension:
