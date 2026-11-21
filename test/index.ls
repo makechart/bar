@@ -167,6 +167,13 @@ cases ++= [
   * name: "interactions:bin", data: \scores, config: {gap: 0, bin: {enabled: true}}, steps: [interactions-is {brush: <[value]>}]
 ]
 
+# 段落說明表要涵蓋這些段落. 路徑有沒有對到 mod.config 的段落由 viewer 在每個 case 檢查 ( konfig.tab.check )
+tabinfo-ok = (c) ->
+  tab = c.mod.tabinfo or {}
+  for k in <[common common/subset xaxis xaxis/tick legend sort brush]> =>
+    if !tab[k] => throw new Error("tabinfo 少了 #k")
+cases.push {name: "tabinfo", steps: [tabinfo-ok]}
+
 # 直方圖 ( 綁 value 時自動分組 )
 cases ++= [
   * name: "bin:auto", data: \scores, config: {gap: 0, bin: {enabled: true}}

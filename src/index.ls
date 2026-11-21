@@ -68,6 +68,10 @@ mod = ({context, t}) ->
     gap: type: \number, default: 2, min: 0, max: 100, step: 1, desc: {en: "space between bars ( px ); in group mode, the space between groups", "zh-TW": "長條之間的間距 ( px )；group 模式下是每組之間的間距"}
     # 打開而且有綁 value 時才有作用: 原始數值分組成區間 ( 直方圖 ), 見 @plotdb/chart utils/bin
     bin: JSON.parse(JSON.stringify(chart.utils.config.preset.bin))
+  # 段落 ( tab ) 的說明, key 是段落的路徑. preset 的段落由 chart.utils.config.tabinfo 掛上來, 共用的 common 由核心補
+  tabinfo: chart.utils.config.tabinfo({xaxis: \axis, yaxis: \axis, legend: \legend, bin: \bin}) <<<
+    sort: desc: {en: "sort the bars by name or by size, instead of keeping the data order", "zh-TW": "依名稱或大小排序長條，而不是照資料原本的順序"}
+    brush: desc: {en: "drag across the chart to select a range of bars, which filters other charts on a dashboard", "zh-TW": "在圖上拖曳選取一段長條，並篩選儀表板上的其他圖"}
   dimension:
     size: {type: \R, multiple: true, name: "size"}
     name: {type: \NCO, name: "name"}
