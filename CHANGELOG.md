@@ -1,5 +1,9 @@
 # Change Logs
 
+## v0.0.15
+
+ - add `desc` ( en / zh-TW ) to the config items, shown under the label in the makechart style panel
+
 ## v0.0.14
 
  - declare `interactions` ( needs `@plotdb/chart` >= 3.16.0 ): only the brush filters ( `name`, or `value` in
